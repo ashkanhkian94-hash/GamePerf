@@ -1,0 +1,352 @@
+name: Build APK
+on:
+  workflow_dispatch:
+  push:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Create project files
+        run: |
+          mkdir -p $(dirname settings.gradle.kts)
+          cat > settings.gradle.kts <<'EOF_0'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "GamePerf"
+          include(":app")
+          EOF_0
+          mkdir -p $(dirname build.gradle.kts)
+          cat > build.gradle.kts <<'EOF_1'
+          plugins {
+              id("com.android.application") version "8.5.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+          }
+          EOF_1
+          mkdir -p $(dirname gradle.properties)
+          cat > gradle.properties <<'EOF_2'
+          org.gradle.jvmargs=-Xmx2g
+          android.useAndroidX=true
+          EOF_2
+          mkdir -p $(dirname app/build.gradle.kts)
+          cat > app/build.gradle.kts <<'EOF_3'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.gameperf.app"
+              compileSdk = 34
+              defaultConfig {
+                  applicationId = "com.gameperf.app"
+                  minSdk = 26
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = "17" }
+          }
+          dependencies {
+              implementation("dev.rikka.shizuku:api:13.1.5")
+              implementation("dev.rikka.shizuku:provider:13.1.5")
+          }
+          EOF_3
+          mkdir -p $(dirname app/src/main/AndroidManifest.xml)
+          cat > app/src/main/AndroidManifest.xml <<'EOF_4'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:label="Game Performance"
+                  android:icon="@mipmap/ic_launcher"
+                  android:theme="@android:style/Theme.Material.NoActionBar">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+                  <provider
+                      android:name="rikka.shizuku.ShizukuProvider"
+                      android:authorities="${applicationId}.shizuku"
+                      android:enabled="true"
+                      android:exported="true"
+                      android:multiprocess="false"
+                      android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+              </application>
+          </manifest>
+          EOF_4
+          mkdir -p $(dirname app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml)
+          cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF_5'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@drawable/ic_bg" />
+              <foreground android:drawable="@drawable/ic_fg" />
+          </adaptive-icon>
+          EOF_5
+          mkdir -p $(dirname app/src/main/res/drawable/ic_bg.xml)
+          cat > app/src/main/res/drawable/ic_bg.xml <<'EOF_6'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp"
+              android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#0D0F14" android:pathData="M0,0h108v108h-108z" />
+              <path android:fillColor="#1A1F2B" android:pathData="M0,70L108,40L108,108L0,108z" />
+          </vector>
+          EOF_6
+          mkdir -p $(dirname app/src/main/res/drawable/ic_fg.xml)
+          cat > app/src/main/res/drawable/ic_fg.xml <<'EOF_7'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp"
+              android:viewportWidth="108" android:viewportHeight="108">
+              <path android:strokeColor="#FF6D00" android:strokeWidth="5"
+                  android:strokeLineCap="round" android:fillColor="#00000000"
+                  android:pathData="M30,76 A32,32 0 1,1 78,76" />
+              <path android:strokeColor="#FFB74D" android:strokeWidth="2"
+                  android:fillColor="#00000000"
+                  android:pathData="M54,30 A24,24 0 1,1 53.9,30" />
+              <path android:fillColor="#00E5FF"
+                  android:pathData="M58,26 L40,58 L52,58 L47,84 L68,48 L55,48 Z" />
+          </vector>
+          EOF_7
+          mkdir -p $(dirname app/src/main/java/com/gameperf/app/MainActivity.kt)
+          cat > app/src/main/java/com/gameperf/app/MainActivity.kt <<'EOF_8'
+          package com.gameperf.app
+          
+          import android.app.Activity
+          import android.content.pm.PackageManager
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.GradientDrawable
+          import android.os.Bundle
+          import android.view.Gravity
+          import android.view.View
+          import android.widget.Button
+          import android.widget.EditText
+          import android.widget.LinearLayout
+          import android.widget.ScrollView
+          import android.widget.TextView
+          import rikka.shizuku.Shizuku
+          
+          class MainActivity : Activity() {
+          
+              private lateinit var status: TextView
+              private lateinit var out: TextView
+              private lateinit var scroll: ScrollView
+              private lateinit var pkg: EditText
+          
+              private val binderL = Shizuku.OnBinderReceivedListener { runOnUiThread { refresh() } }
+              private val deadL = Shizuku.OnBinderDeadListener { runOnUiThread { refresh() } }
+              private val permL = Shizuku.OnRequestPermissionResultListener { _, _ -> runOnUiThread { refresh() } }
+          
+              private val permanent = listOf(
+                  "device_config put game_overlay {PKG} mode=2",
+                  "cmd package compile -m speed-profile -f {PKG}",
+                  "settings put global background_process_limit 2",
+                  "settings put global always_finish_activities 0",
+                  "settings put global ambient_enabled 0",
+                  "settings put secure doze_enabled 0",
+                  "settings put global wifi_scan_always_enabled 0",
+                  "settings put global ble_scan_always_enabled 0",
+                  "settings put global network_recommendations_enabled 0"
+              )
+          
+              private val afterReboot = listOf(
+                  "cmd power set-adaptive-power-saver-enabled false",
+                  "cmd power set-fixed-performance-mode-enabled true",
+                  "dumpsys deviceidle whitelist +{PKG}",
+                  "cmd appops set {PKG} RUN_IN_BACKGROUND allow",
+                  "cmd appops set {PKG} RUN_ANY_IN_BACKGROUND allow",
+                  "device_config put activity_manager max_cached_processes 32",
+                  "device_config put activity_manager max_phantom_processes 2147483647"
+              )
+          
+              private val restore = listOf(
+                  "cmd power set-adaptive-power-saver-enabled true",
+                  "cmd power set-fixed-performance-mode-enabled false",
+                  "settings put global background_process_limit -1",
+                  "settings put global wifi_scan_always_enabled 1",
+                  "settings put global ble_scan_always_enabled 1",
+                  "settings put secure doze_enabled 1",
+                  "settings put global ambient_enabled 1",
+                  "dumpsys deviceidle whitelist -{PKG}"
+              )
+          
+              private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+          
+              private fun btn(text: String, color: String, action: () -> Unit): Button {
+                  val b = Button(this)
+                  b.text = text
+                  b.isAllCaps = false
+                  b.setTextColor(Color.WHITE)
+                  b.textSize = 15f
+                  val bg = GradientDrawable()
+                  bg.setColor(Color.parseColor(color))
+                  bg.cornerRadius = dp(14).toFloat()
+                  b.background = bg
+                  val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52))
+                  lp.topMargin = dp(8)
+                  b.layoutParams = lp
+                  b.setOnClickListener { action() }
+                  return b
+              }
+          
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+          
+                  val root = LinearLayout(this)
+                  root.orientation = LinearLayout.VERTICAL
+                  root.setBackgroundColor(Color.parseColor("#0D0F14"))
+                  root.setPadding(dp(16), dp(36), dp(16), dp(16))
+          
+                  val title = TextView(this)
+                  title.text = "GAME PERFORMANCE"
+                  title.setTextColor(Color.parseColor("#FF6D00"))
+                  title.textSize = 24f
+                  title.typeface = Typeface.DEFAULT_BOLD
+                  title.gravity = Gravity.CENTER
+                  root.addView(title)
+          
+                  status = TextView(this)
+                  status.gravity = Gravity.CENTER
+                  status.textSize = 14f
+                  status.setPadding(0, dp(6), 0, dp(10))
+                  root.addView(status)
+          
+                  pkg = EditText(this)
+                  pkg.setText("com.tencent.ig")
+                  pkg.setTextColor(Color.WHITE)
+                  pkg.setHintTextColor(Color.GRAY)
+                  pkg.hint = "Game package"
+                  pkg.setSingleLine()
+                  root.addView(pkg)
+          
+                  root.addView(btn("🎮  Game Mode (all in one)", "#FF6D00") {
+                      run("Game Mode", permanent + afterReboot)
+                  })
+                  root.addView(btn("⚡  Permanent block (once)", "#1E88E5") { run("Permanent", permanent) })
+                  root.addView(btn("🔁  After-reboot block", "#00897B") { run("After reboot", afterReboot) })
+                  root.addView(btn("↩  Restore defaults", "#6D4C41") { run("Restore", restore) })
+                  root.addView(btn("🔑  Request Shizuku permission", "#37474F") { requestPerm() })
+          
+                  scroll = ScrollView(this)
+                  out = TextView(this)
+                  out.setTextColor(Color.parseColor("#B0BEC5"))
+                  out.textSize = 12f
+                  out.typeface = Typeface.MONOSPACE
+                  out.setPadding(0, dp(10), 0, 0)
+                  scroll.addView(out)
+                  root.addView(scroll, LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+          
+                  setContentView(root)
+          
+                  Shizuku.addBinderReceivedListenerSticky(binderL)
+                  Shizuku.addBinderDeadListener(deadL)
+                  Shizuku.addRequestPermissionResultListener(permL)
+                  refresh()
+              }
+          
+              override fun onDestroy() {
+                  super.onDestroy()
+                  Shizuku.removeBinderReceivedListener(binderL)
+                  Shizuku.removeBinderDeadListener(deadL)
+                  Shizuku.removeRequestPermissionResultListener(permL)
+              }
+          
+              override fun onResume() {
+                  super.onResume()
+                  refresh()
+              }
+          
+              private fun alive() = try { Shizuku.pingBinder() } catch (e: Throwable) { false }
+          
+              private fun ready() = try {
+                  Shizuku.pingBinder() &&
+                      Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+              } catch (e: Throwable) { false }
+          
+              private fun refresh() {
+                  when {
+                      ready() -> {
+                          status.text = "● Connected (Shizuku)"
+                          status.setTextColor(Color.parseColor("#00E676"))
+                      }
+                      alive() -> {
+                          status.text = "● Shizuku running - permission needed"
+                          status.setTextColor(Color.parseColor("#FFC107"))
+                      }
+                      else -> {
+                          status.text = "● Shizuku not running - open Shizuku and start it"
+                          status.setTextColor(Color.parseColor("#FF5252"))
+                      }
+                  }
+              }
+          
+              private fun requestPerm() {
+                  if (!alive()) { log("Shizuku is not running."); return }
+                  try { Shizuku.requestPermission(100) } catch (e: Throwable) { log("Error: $e") }
+              }
+          
+              private fun log(s: String) {
+                  out.append(s + "\n")
+                  scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+              }
+          
+              private fun exec(cmd: String): String {
+                  return try {
+                      val m = Shizuku::class.java.getDeclaredMethod(
+                          "newProcess",
+                          Array<String>::class.java, Array<String>::class.java, String::class.java)
+                      m.isAccessible = true
+                      val p = m.invoke(null, arrayOf("sh", "-c", cmd), null, null) as Process
+                      val o = p.inputStream.bufferedReader().readText()
+                      val e = p.errorStream.bufferedReader().readText()
+                      p.waitFor()
+                      val r = (o + e).trim()
+                      if (r.isEmpty()) "ok" else r
+                  } catch (e: Throwable) {
+                      "ERROR: " + (e.cause ?: e)
+                  }
+              }
+          
+              private fun run(title: String, cmds: List<String>) {
+                  if (!ready()) {
+                      if (alive()) requestPerm() else log("Start Shizuku first (Wireless debugging).")
+                      return
+                  }
+                  val p = pkg.text.toString().trim().ifEmpty { "com.tencent.ig" }
+                  out.text = ""
+                  log("▶ $title")
+                  Thread {
+                      for (c in cmds) {
+                          val cmd = c.replace("{PKG}", p)
+                          val res = exec(cmd)
+                          runOnUiThread { log("$ $cmd\n$res\n") }
+                      }
+                      runOnUiThread { log("✔ Done") }
+                  }.start()
+              }
+          }
+          EOF_8
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      - name: Build
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GamePerformance-APK
+          path: app/build/outputs/apk/debug/*.apk
